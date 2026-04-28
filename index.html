@@ -45,7 +45,7 @@
     color: var(--ink); text-decoration: none;
   }
 
-  .nav-links { display: flex; gap: 2.4rem; list-style: none; }
+  .nav-links { display: flex; gap: 2.4rem; list-style: none; align-items: center; }
   .nav-links a {
     font-family: 'DM Mono', monospace;
     font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
@@ -53,6 +53,33 @@
     transition: color 0.2s;
   }
   .nav-links a:hover { color: var(--ink); }
+
+  /* Social links in nav — formal, slightly distinct */
+  .nav-social-divider {
+    width: 1px; height: 14px; background: var(--rule);
+    display: inline-block; margin: 0 0.4rem;
+  }
+
+  .nav-social {
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+
+  .nav-social a {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--gold);
+    text-decoration: none;
+    border: 1px solid rgba(184,146,58,0.35);
+    padding: 0.28rem 0.65rem;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .nav-social a:hover {
+    background: var(--gold);
+    color: var(--paper);
+    border-color: var(--gold);
+  }
 
   /* ─── HERO ─── */
   #hero {
@@ -103,7 +130,7 @@
     margin-top: 2rem;
     font-size: 1.25rem;
     color: var(--muted);
-    max-width: 48ch;
+    max-width: 52ch;
     line-height: 1.65;
     font-weight: 300;
   }
@@ -133,6 +160,17 @@
     transition: all 0.2s; display: inline-block;
   }
   .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+  /* Portfolio button — distinct from ghost, uses gold border */
+  .btn-portfolio {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--gold); background: transparent;
+    border: 1px solid var(--gold); padding: 0.9rem 2rem;
+    cursor: pointer; text-decoration: none;
+    transition: all 0.2s; display: inline-block;
+  }
+  .btn-portfolio:hover { background: var(--gold); color: var(--paper); }
 
   .hero-stats {
     margin-top: 5rem;
@@ -435,6 +473,14 @@
     <li><a href="#education">Education</a></li>
     <li><a href="#certifications">Certifications</a></li>
     <li><a href="#contact">Contact</a></li>
+    <li>
+      <span class="nav-social-divider"></span>
+    </li>
+    <li class="nav-social">
+      <a href="https://curly-holiday-ef3.notion.site/Shivansh-Rao-Portfolio-30b12571227c80df9fa2faaecd47cbd1" target="_blank">Portfolio</a>
+      <a href="https://www.linkedin.com/in/theshivrao/" target="_blank">LinkedIn</a>
+      <a href="https://x.com/theshivrao" target="_blank">Twitter</a>
+    </li>
   </ul>
 </nav>
 
@@ -450,12 +496,14 @@
   </h1>
 
   <p class="hero-sub">
-    Credit risk, regulatory compliance, and financial operations specialist — with a deep conviction that rigorous analysis and clean automation are the foundations of sound finance.
+    Operations-driven finance professional with 4+ years building and automating financial workflows across receivables financing, portfolio management, and investment operations — grounded in AML/KYC, CDD, CPC, and EU regulatory frameworks.
   </p>
 
   <div class="hero-cta">
     <a href="#experience" class="btn-primary">View Experience</a>
-    <a href="mailto:shiv.tcdfinance@gmail.com" class="btn-ghost">Get in touch</a>
+    <a href="https://curly-holiday-ef3.notion.site/Shivansh-Rao-Portfolio-30b12571227c80df9fa2faaecd47cbd1" target="_blank" class="btn-portfolio">Portfolio ↗</a>
+    <a href="https://x.com/theshivrao" target="_blank" class="btn-ghost">Twitter ↗</a>
+    <a href="https://www.linkedin.com/in/theshivrao/" target="_blank" class="btn-ghost">Get in touch</a>
   </div>
 
   <div class="hero-stats">
@@ -490,7 +538,7 @@
     <div>
       <div class="about-body">
         <p>APA (Loans) qualified MSc Finance graduate from <strong>Trinity College Dublin</strong> with 4+ years of experience across credit risk, financial operations, and regulatory compliance.</p>
-        <p>I have built my career at the intersection of <strong>loan analysis, KYC/AML processes, and financial automation</strong> — consistently finding ways to make reporting cleaner, reconciliations faster, and documentation more robust.</p>
+        <p>I have managed working-capital deployment to vendors, reconciled multi-party portfolios, produced <strong>automated daily investor reports</strong>, and built the dashboards and scripts that made all of it faster and error-free.</p>
         <p>Python is my toolkit for turning manual workflows into reliable systems. Dublin is my base. A front-office credit or risk role in Europe is where I am headed.</p>
       </div>
       <div class="about-quote">
@@ -501,23 +549,23 @@
     <div class="skills-grid">
       <div class="skill-card">
         <div class="skill-card-label">Credit & Lending</div>
-        <div class="skill-card-items">Loan analysis, LBO modelling, LGD, DSCR, credit exposure tracking</div>
+        <div class="skill-card-items">Loan analysis, LBO modelling, LGD, DSCR, credit exposure tracking, receivables financing</div>
       </div>
       <div class="skill-card">
         <div class="skill-card-label">Compliance</div>
-        <div class="skill-card-items">KYC / AML, FATCA / CRS, CPC, MiFID, MARP, CDD</div>
+        <div class="skill-card-items">KYC / AML, FATCA / CRS, CPC, MiFID, MARP, CDD, EU Regulatory Framework</div>
       </div>
       <div class="skill-card">
         <div class="skill-card-label">Automation</div>
-        <div class="skill-card-items">Python (NumPy, Pandas), Excel, bank-to-ledger reconciliation, CRM automation</div>
+        <div class="skill-card-items">Python (NumPy, Pandas), Excel, bank-to-ledger reconciliation, CRM automation, Power BI</div>
       </div>
       <div class="skill-card">
         <div class="skill-card-label">Reporting</div>
-        <div class="skill-card-items">Investment trackers, financial analysis reports, valuation dashboards</div>
+        <div class="skill-card-items">Investment trackers, NAV reports, financial analysis, valuation dashboards, daily pipeline reporting</div>
       </div>
       <div class="skill-card">
         <div class="skill-card-label">Finance</div>
-        <div class="skill-card-items">Private equity valuation, IRR sensitivity, fund SPV frameworks, Bloomberg</div>
+        <div class="skill-card-items">Private equity valuation, IRR sensitivity, fund SPV frameworks, Bloomberg, capital call operations</div>
       </div>
       <div class="skill-card">
         <div class="skill-card-label">Location</div>
@@ -542,14 +590,14 @@
         <div class="exp-location">Dublin, Ireland</div>
       </div>
       <div class="exp-content">
-        <div class="exp-role">Concierge – Corporate Building Site</div>
+        <div class="exp-role">Concierge – Corporate Park</div>
         <ul class="exp-bullets">
           <li>Maintained structured incident, risk, and SLA compliance registers across 15+ commercial sites, ensuring audit-ready documentation.</li>
+          <li>Acted as point of contact liaising between corporate tenants, building management, and property manager for seamless resolution of queries, issues, and repairs on a daily basis.</li>
           <li>Reviewed operational exceptions and escalated compliance breaches daily in line with predefined reporting procedures.</li>
-          <li>Handled tenant queries and coordinated with property management within structured service and compliance frameworks.</li>
         </ul>
         <div class="exp-tags">
-          <span class="tag">Compliance</span><span class="tag">Documentation</span><span class="tag">Risk Registers</span>
+          <span class="tag">Compliance</span><span class="tag">Documentation</span><span class="tag">Risk Registers</span><span class="tag">SLA</span>
         </div>
       </div>
     </div>
@@ -561,15 +609,15 @@
         <div class="exp-location">Barbados (Remote)</div>
       </div>
       <div class="exp-content">
-        <div class="exp-role">Credit Risk Associate</div>
+        <div class="exp-role">Investment Deal Associate</div>
         <ul class="exp-bullets">
-          <li>Conducted structural review of a credit LBO model ahead of listing on the Bermuda Exchange; recommendations improved fund deal screening by 8%.</li>
-          <li>Led design of structured investment reporting trackers, improving valuation reporting efficiency by ~30%.</li>
-          <li>Performed monthly bank-to-ledger reconciliation for 100+ transaction entries per cycle; automated process using Python.</li>
-          <li>Maintained CRM records including AML/KYC documentation, capital calls schedules, and transaction records for financial reporting.</li>
+          <li>Managed quarterly capital call operations, coordinating committed investor capital against deployment schedules — directly analogous to funder drawdown and allocation management in a receivables financing platform.</li>
+          <li>Produced monthly NAV reports using proprietary private-company valuation models; maintained full bank-to-ledger reconciliation for 100+ transactions per cycle using Python (Pandas/NumPy) scripts, resolving all discrepancies before sign-off.</li>
+          <li>Built a Notion-based AML/KYC compliance workflow with Kanban tracking for new funder onboarding under FATCA/CRS and CDD frameworks.</li>
+          <li>Redesigned LBO audit screening workflow in Power BI, improving deal screening efficiency by 8% and reporting clarity by 30%.</li>
         </ul>
         <div class="exp-tags">
-          <span class="tag">Credit Risk</span><span class="tag">LBO</span><span class="tag">AML/KYC</span><span class="tag">Python</span><span class="tag">Reconciliation</span>
+          <span class="tag">Capital Calls</span><span class="tag">NAV Reports</span><span class="tag">AML/KYC</span><span class="tag">Python</span><span class="tag">Reconciliation</span><span class="tag">LBO</span>
         </div>
       </div>
     </div>
@@ -581,15 +629,15 @@
         <div class="exp-location">Luxembourg (Remote)</div>
       </div>
       <div class="exp-content">
-        <div class="exp-role">Investor Risk Compliance Associate</div>
+        <div class="exp-role">Equity Research Analyst</div>
         <ul class="exp-bullets">
-          <li>Conducted KYC and AML verification for 50+ high-net-worth clients using dual-verification, FATCA/CRS, and supporting documentation.</li>
-          <li>Maintained three structured cashflow trackers covering 35 portfolio companies under fund SPV frameworks.</li>
-          <li>Validated 20+ investor disclosure documents and onboarding files, cross-verifying data against third-party databases.</li>
+          <li>Maintained three live portfolio trackers across 35 companies under an SPV framework, with three-way data validation against third-party sources before every investor submission.</li>
+          <li>Reviewed and signed off 20+ investor onboarding and disclosure documents, cross-verifying financial data and resolving inconsistencies ahead of reporting deadlines.</li>
+          <li>Standardised pitch reporting to a template framework, cutting production time from 3 days to 8 hours while reducing errors in investor-facing pitch decks.</li>
           <li>Developed Python scripts (NumPy, Pandas) automating financial analysis report generation aligned with compliance and audit standards.</li>
         </ul>
         <div class="exp-tags">
-          <span class="tag">KYC/AML</span><span class="tag">FATCA/CRS</span><span class="tag">SPV</span><span class="tag">Python</span><span class="tag">Compliance</span>
+          <span class="tag">KYC/AML</span><span class="tag">FATCA/CRS</span><span class="tag">SPV</span><span class="tag">Python</span><span class="tag">Portfolio Tracking</span>
         </div>
       </div>
     </div>
@@ -601,34 +649,34 @@
         <div class="exp-location">India</div>
       </div>
       <div class="exp-content">
-        <div class="exp-role">Loan Operations Analyst</div>
+        <div class="exp-role">Supplier Onboarding Associate</div>
         <ul class="exp-bullets">
-          <li>Supported deployment of short-term vendor loans (INR 3M), tracked repayments, monitored credit exposure, and built a loan-to-sales repayment risk dashboard.</li>
-          <li>Streamlined monthly financial reconciliations across multi-channel revenue, improving discrepancy identification by 30%.</li>
-          <li>Reduced manual CRM updating time by 5× through structured automation, improving LGD and DSCR data inflow reliability.</li>
-          <li>Reviewed vendor financial records including sales and invoices to support short-term lending decisions.</li>
+          <li>Operated a sales-linked microfinancing programme for 150+ vendors — deploying working capital against projected sales data and reconciling repayments directly against live sales receipts; a structural parallel to receivables financing and portfolio cash management.</li>
+          <li>Built a Google Looker Studio automated daily reporting pipeline delivering portfolio performance data at 7am each morning; maintained data integrity and resolved report breaks before sign-off.</li>
+          <li>Automated monthly operational workflows (40–60 items/month) via unified multi-sheet dashboard, reducing a 20-day manual process to 3 days — a 6× throughput improvement.</li>
+          <li>Streamlined cash deployment and reconciliation processes, improving discrepancy identification by 30% and reducing manual CRM updates by 5× through structured automation.</li>
         </ul>
         <div class="exp-tags">
-          <span class="tag">Loan Operations</span><span class="tag">LGD</span><span class="tag">DSCR</span><span class="tag">CRM</span><span class="tag">Reconciliation</span>
+          <span class="tag">Vendor Financing</span><span class="tag">Reconciliation</span><span class="tag">Automation</span><span class="tag">LGD</span><span class="tag">DSCR</span><span class="tag">CRM</span>
         </div>
       </div>
     </div>
 
     <div class="exp-item fade-in">
       <div class="exp-meta">
-        <div class="exp-date">Jun 2020 – Jul 2021</div>
-        <div class="exp-company">SME Financial Consultancy</div>
+        <div class="exp-date">Jul 2020 – May 2021</div>
+        <div class="exp-company">Business Consultancy</div>
         <div class="exp-location">India (Founder)</div>
       </div>
       <div class="exp-content">
         <div class="exp-role">Founder & Financial Consultant</div>
         <ul class="exp-bullets">
-          <li>Supported French family offices with investment position tracking, valuation, and reporting infrastructure — optimising workflows by 30% and reducing process costs by 70%.</li>
-          <li>Developed investment pitch decks for 35+ SMEs and global start-ups across the US, India, and UAE incorporating market research, 5-year forecasts, and equity valuation.</li>
-          <li>Listed financial models on Corporate Finance Institute; became a top contributor.</li>
+          <li>Built a Bloomberg API and Google Finance investment dashboard for a French family office, creating a single-source-of-truth data architecture across multiple client sub-dashboards — reducing reporting process cost by 70% and manual effort by 30%.</li>
+          <li>Developed 5-year financial models, equity valuations, and investment pitch materials for 35+ SMEs across the US, UK, France, UAE, and India.</li>
+          <li>Listed financial models on Corporate Finance Institute; became a top contributor across refinancing, valuation, and project management templates.</li>
         </ul>
         <div class="exp-tags">
-          <span class="tag">Valuation</span><span class="tag">Pitch Decks</span><span class="tag">Financial Modelling</span><span class="tag">Family Office</span>
+          <span class="tag">Valuation</span><span class="tag">Pitch Decks</span><span class="tag">Financial Modelling</span><span class="tag">Family Office</span><span class="tag">Bloomberg</span>
         </div>
       </div>
     </div>
@@ -649,6 +697,7 @@
       <div class="edu-uni">IOB · UCD, Dublin</div>
       <div class="edu-detail">
         Double Distinction<br>
+        Central Bank-Recognised Qualification<br>
         EU Regulatory Framework<br>
         CPC · MiFID · CDD · AML/KYC<br>
         Stress Testing · Central Bank CB Cert
@@ -741,10 +790,17 @@
         </div>
         <span class="contact-link-arrow">↗</span>
       </a>
-      <a class="contact-link" href="https://bit.ly/theshivrao" target="_blank">
+      <a class="contact-link" href="https://x.com/theshivrao" target="_blank">
+        <div>
+          <div class="contact-link-label">Twitter / X</div>
+          <div class="contact-link-value">x.com/theshivrao</div>
+        </div>
+        <span class="contact-link-arrow">↗</span>
+      </a>
+      <a class="contact-link" href="https://curly-holiday-ef3.notion.site/Shivansh-Rao-Portfolio-30b12571227c80df9fa2faaecd47cbd1" target="_blank">
         <div>
           <div class="contact-link-label">Portfolio</div>
-          <div class="contact-link-value">bit.ly/theshivrao</div>
+          <div class="contact-link-value">Notion Portfolio</div>
         </div>
         <span class="contact-link-arrow">↗</span>
       </a>
