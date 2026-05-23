@@ -1,0 +1,1026 @@
+import os
+import re
+import json
+import subprocess
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from anthropic import Anthropic
+
+# ============================================================================
+# CONFIGURATION — update OUTPUT_BASE_DIR to your path
+# ============================================================================
+
+CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "sk-ant-api.........")
+
+OUTPUT_BASE_DIR = Path("/Users/CV Database")
+
+# ============================================================================
+# HARVARD ACTION WORDS
+# ============================================================================
+
+ACTION_WORDS = [
+    "Accomplished","Achieved","Contracted","Coordinated","Handled","Headed","Organized",
+    "Oversaw","Regulated","Reorganized","Addressed","Arbitrated","Developed","Directed",
+    "Influenced","Interpreted","Presented","Promoted","Suggested","Synthesized","Clarified",
+    "Collected","Diagnosed","Surveyed","Discovered","Interviewed","Systematized","Assembled",
+    "Built","Installed","Maintained","Solved","Standardized","Programmed","Engineered",
+    "Designed","Implemented","Administered","Allocated","Computed","Projected","Researched",
+    "Calculated","Analyzed","Budgeted","Forecasted","Approved","Accelerated","Classified",
+    "Expanded","Gained","Operated","Retrieved","Screened","Tabulated","Adapted","Enabled",
+    "Advised","Persuaded","Encouraged","Delegated","Impacted","Planned","Reviewed","Arranged",
+    "Documented","Lectured","Publicized","Translated","Concluded","Evaluated","Investigated",
+    "Tested","Streamlined","Stimulated","Improved","Predicted","Scheduled","Authored",
+    "Drafted","Liaised","Reconciled","Verbalized","Conducted","Examined","Modeled","Optimized",
+    "Upgraded","Coached","Explained","Studied","Assigned","Increased","Prioritized",
+    "Spearheaded","Collaborated","Edited","Mediated","Recruited","Wrote","Constructed",
+    "Extracted","Overhauled","Communicated","Facilitated","Taught","Attained","Earned","Led",
+    "Produced","Strengthened","Convinced","Energized","Moderated","Reported","Critiqued",
+    "Formed","Resolved","Devised","Guided","Trained","Acted","Composed","Established",
+    "Introduced","Invented","Revitalized","Shaped","Assessed","Assisted","Enhanced",
+    "Provided","Expedited","Referred","Forecasted","Conceived","Fashioned","Originated",
+    "Visualized","Facilitated","Rehabilitated","Added","Compiled","Gathered","Prepared",
+    "Selected","Unified","Appraised","Managed","Audited","Marketed","Balanced","Maximized",
+    "Conceptualized","Founded","Performed","Familiarized","Represented","Completed",
+    "Generated","Processed","Simplified","Updated","Created","Illustrated","Customized",
+    "Initiated","Published","Counseled","Served","Broadened","Controlled","Implemented",
+    "Purchased","Sold","Utilized","Demonstrated","Motivated","Supported","Cataloged",
+    "Defined","Inspected","Recorded","Specified","Validated","Chaired","Mastered","Proved",
+    "Supervised","Corresponded","Enlisted","Negotiated","Rewrote","Derived","Identified",
+    "Determined","Summarized","Fabricated","Repaired","Integrated","Revised","Educated",
+    "Proposed","Executed","Monitored","Reinforced","Structured","Launched","Reduced",
+    "Steered","Verified","Consolidated","Orchestrated","Recommended","Surpassed","Delivered",
+    "Formulated","Spoke","Budgeted","Minimized","Instituted","Redesigned","Participated",
+    "Centralized","Dispatched","Steered","Verified","Consolidated","Executed","Recommended",
+]
+
+# ============================================================================
+# MASTER CV
+# ============================================================================
+
+MASTER_CV = """
+SHIVANSH RAO MAVIDANAM APA
+
+
+
+"""
+
+# ============================================================================
+# PROMPTS
+# ============================================================================
+
+EXTRACT_KW_PROMPT = """You are an ATS expert. Extract every important keyword and phrase from the job description.
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "keywords": ["word1", "phrase two", "term3", ...]
+}
+Include: job titles, skills, tools, soft skills, action verbs, industry terms, responsibilities, qualifications."""
+
+GENERATE_CV_PROMPT = """You are an expert CV writer. Rewrite the master CV to match the job description as closely as possible for ATS.
+
+RULES:
+1. Output ONLY the CV between markers ---CV_START--- and ---CV_END---
+2. Use EXACTLY these section headers (uppercase, no brackets): PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION, SKILLS & CERTIFICATIONS
+3. Job entry format: Job Title | Company | City | MMM YYYY – MMM YYYY (on its own line, no bullet)
+4. Every bullet starts with • then a Harvard action verb from the provided list, and MUST end with a full stop.
+5. Weave in as many keywords from the keyword list as naturally possible
+6. Never invent new experience — only reframe existing ones from the master CV
+7. Professional Summary: 3-4 sentences, heavily keyword-loaded
+8. Skills section: each line starts with • followed by grouped skills ending with a full stop. Group by theme, include every tool/technology and soft skill from the keywords list that appears in or is supported by master CV
+9. Do NOT use any markdown formatting like **bold** or *italic* — plain text only
+10. In PROFESSIONAL SUMMARY, in the last sentence, include: Applying for <job role> with Job ID <ID> at <company> — only if Job ID is visible in the job description.
+
+---CV_START---
+[full CV here]
+---CV_END---"""
+
+REWORK_CV_PROMPT = """You are an ATS optimization expert. Your job is to rework the given CV to hit 93%+ ATS match.
+
+RULES:
+1. Output ONLY the CV between markers ---CV_START--- and ---CV_END---
+2. Keep EXACTLY these section headers: PROFESSIONAL SUMMARY, WORK EXPERIENCE, EDUCATION, SKILLS & CERTIFICATIONS
+3. Job entry format: Job Title | Company | City | MMM YYYY – MMM YYYY
+4. Every bullet starts with • then a Harvard action verb, and MUST end with a full stop.
+5. Add as many missing keywords as possible naturally into bullets and summary
+6. Do NOT invent new experience — reframe existing bullets only
+7. Focus especially on adding missing keywords to: (a) professional summary, (b) skills section, (c) bullet points
+8. Skills section: each line MUST start with • and end with a full stop. Group skills by theme.
+9. Do NOT use any markdown formatting like **bold** or *italic* — plain text only. No asterisks anywhere.
+10. In PROFESSIONAL SUMMARY, in the last sentence, include: Applying for <job role> with Job ID <ID> at <company> — only if Job ID is visible in the job description.
+
+---CV_START---
+[full CV here]
+---CV_END---"""
+
+# NOTE: Salutation is intentionally omitted from cover letter prompt — Python handles it.
+COVER_LETTER_PROMPT = """Write a concise, compelling cover letter body only — no salutation or sign-off, just the content paragraphs.
+
+FORMAT:
+- Date on first line (e.g. 23 May 2026)
+- Blank line
+- Applicant email: shiv.tcdfinance@gmail.com
+- Blank line
+- Company name and address if available, otherwise just the company name and Ireland on separate lines
+- Blank line
+- Subject: Application for <Role Title> — Job ID: <ID if available>
+- Blank line
+- Dear Hiring Manager,
+- Blank line
+- Paragraph 1: Why this role and company excite you (mention company name and role).
+- Blank line
+- Paragraph 2: Top 2-3 relevant experiences from the CV that match the job.
+- Blank line
+- Paragraph 3: Confident close with call to action.
+
+Rules:
+- Under 300 words total for the three paragraphs
+- Professional, direct tone
+- Do NOT include any sign-off or salutation at the end — stop after the third paragraph
+- Do NOT repeat the date anywhere inside the letter body"""
+
+# ============================================================================
+# CLAUDE CLIENT
+# ============================================================================
+
+def get_client():
+    api_key = CLAUDE_API_KEY or os.environ.get("ANTHROPIC_API_KEY", "")
+    return Anthropic(api_key=api_key)
+
+# ============================================================================
+# KEYWORD EXTRACTION
+# ============================================================================
+
+def extract_keywords(client, job_description):
+    print("\n🔍 Extracting key terms from job description...")
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        system=EXTRACT_KW_PROMPT,
+        messages=[{"role": "user", "content": job_description}]
+    )
+    text = msg.content[0].text.strip()
+    text = re.sub(r'^```json\s*', '', text)
+    text = re.sub(r'^```\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    try:
+        data = json.loads(text)
+        kws = [k.lower().strip() for k in data.get("keywords", [])]
+        print(f"   → Found {len(kws)} keywords")
+        return kws
+    except Exception as e:
+        print(f"   ⚠️  Keyword parse error: {e}")
+        return []
+
+# ============================================================================
+# ATS SCORING
+# ============================================================================
+
+def tokenize(text):
+    return set(re.findall(r'\b[a-z]{3,}\b', text.lower()))
+
+def calculate_ats(job_keywords, cv_text):
+    if not job_keywords:
+        return 0, [], []
+    cv_tokens = tokenize(cv_text)
+    matched = []
+    unmatched = []
+    for kw in job_keywords:
+        kw_tokens = tokenize(kw)
+        if kw_tokens and kw_tokens.issubset(cv_tokens):
+            matched.append(kw)
+        else:
+            unmatched.append(kw)
+    score = int(len(matched) / len(job_keywords) * 100)
+    return score, matched, unmatched
+
+# ============================================================================
+# CV GENERATION
+# ============================================================================
+
+def clean_cv_text(cv_text):
+    """Strip markdown artifacts like **bold** from CV text."""
+    # Remove **bold** markers
+    cv_text = re.sub(r'\*\*(.+?)\*\*', r'\1', cv_text)
+    # Remove *italic* markers
+    cv_text = re.sub(r'\*(.+?)\*', r'\1', cv_text)
+    return cv_text
+
+def extract_cv_text(raw):
+    m = re.search(r'---CV_START---([\s\S]*?)---CV_END---', raw)
+    if m:
+        return clean_cv_text(m.group(1).strip())
+    lines = raw.strip().split('\n')
+    start = 0
+    for i, line in enumerate(lines):
+        if re.match(r'(PROFESSIONAL SUMMARY|SHIVANSH|WORK EXP)', line.strip().upper()):
+            start = i
+            break
+    return clean_cv_text('\n'.join(lines[start:]).strip())
+
+def generate_cv(client, job_description, job_keywords):
+    print("\n🚀 Generating tailored CV...")
+    kw_str = ", ".join(job_keywords[:80])
+    action_words_str = ", ".join(ACTION_WORDS[:60])
+
+    user_msg = f"""MASTER CV:
+{MASTER_CV}
+
+JOB DESCRIPTION:
+{job_description}
+
+KEYWORDS TO INCLUDE (use as many as possible):
+{kw_str}
+
+HARVARD ACTION VERBS (start every bullet with one of these):
+{action_words_str}
+
+Generate the tailored CV now."""
+
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=3000,
+        system=GENERATE_CV_PROMPT,
+        messages=[{"role": "user", "content": user_msg}]
+    )
+    raw = msg.content[0].text
+    cv = extract_cv_text(raw)
+    if not cv:
+        print("   ⚠️  WARNING: CV extraction returned empty. Raw output:")
+        print(raw[:500])
+    return cv
+
+def rework_cv(client, current_cv, job_description, job_keywords, unmatched):
+    print("\n🔄 Reworking CV to improve ATS score...")
+    missing_str = ", ".join(unmatched[:50])
+    action_words_str = ", ".join(ACTION_WORDS[:60])
+
+    user_msg = f"""CURRENT CV (use this as your base — do NOT revert to master CV):
+{current_cv}
+
+JOB DESCRIPTION:
+{job_description}
+
+MISSING KEYWORDS TO ADD (incorporate as many as possible naturally):
+{missing_str}
+
+ALL JOB KEYWORDS (for reference):
+{", ".join(job_keywords[:80])}
+
+HARVARD ACTION VERBS:
+{action_words_str}
+
+Rework the CV now to maximise ATS score."""
+
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=3000,
+        system=REWORK_CV_PROMPT,
+        messages=[{"role": "user", "content": user_msg}]
+    )
+    raw = msg.content[0].text
+    cv = extract_cv_text(raw)
+    if not cv:
+        print("   ⚠️  WARNING: Rework returned empty — keeping previous CV.")
+        return current_cv
+    return cv
+
+# ============================================================================
+# COVER LETTER
+# ============================================================================
+
+def generate_cover_letter(client, cv_text, job_description):
+    print("\n📝 Generating cover letter...")
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1000,
+        system=COVER_LETTER_PROMPT,
+        messages=[{"role": "user", "content": f"CV:\n{cv_text}\n\nJOB DESCRIPTION:\n{job_description}"}]
+    )
+    return msg.content[0].text.strip()
+
+# ============================================================================
+# COMPANY NAME EXTRACTION
+# ============================================================================
+
+def extract_company(job_description):
+    skip_words = {'Dublin','London','Ireland','United','County','Remote','Hybrid',
+                  'England','Scotland','Wales','UK','US','USA','Europe','Apply','Save'}
+
+    m = re.search(r'(\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)\s*·', job_description)
+    if m:
+        words = [w for w in m.group(1).strip().split() if w not in skip_words][:3]
+        if words:
+            return " ".join(words)
+
+    m2 = re.search(r'About\s+([A-Z][A-Za-z\s&]+?)[\n\.]', job_description)
+    if m2:
+        words = [w for w in m2.group(1).strip().split() if w not in skip_words][:3]
+        if words:
+            return " ".join(words)
+
+    m3 = re.search(r'\bat\s+([A-Z][A-Za-z\s&]+?)(?:\s*[,\n·])', job_description)
+    if m3:
+        words = [w for w in m3.group(1).strip().split() if w not in skip_words][:3]
+        if words:
+            return " ".join(words)
+
+    return "Company"
+
+# ============================================================================
+# NODE PATH DETECTION
+# ============================================================================
+
+def find_node():
+    import shutil
+    found = shutil.which("node")
+    if found:
+        return found
+    candidates = [
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+        "/opt/homebrew/bin/node",
+        "/opt/homebrew/opt/node/bin/node",
+    ]
+    for path in candidates:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    nvm_dir = os.path.expanduser("~/.nvm/versions/node")
+    if os.path.isdir(nvm_dir):
+        versions = sorted(os.listdir(nvm_dir), reverse=True)
+        for v in versions:
+            candidate = os.path.join(nvm_dir, v, "bin", "node")
+            if os.path.isfile(candidate):
+                return candidate
+    try:
+        result = subprocess.run(["which", "node"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+# ============================================================================
+# PYTHON-DOCX FALLBACK — CV
+# ============================================================================
+
+def create_cv_docx_fallback(cv_text, output_path):
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        doc = DocxDocument()
+        for section in doc.sections:
+            section.top_margin    = Inches(0.4)
+            section.bottom_margin = Inches(0.4)
+            section.left_margin   = Inches(0.5)
+            section.right_margin  = Inches(0.5)
+
+        for p in doc.paragraphs:
+            p._element.getparent().remove(p._element)
+
+        contact_lines, body_sections = parse_contact_and_body(cv_text)
+
+        def add_border_bottom(paragraph):
+            pPr = paragraph._p.get_or_add_pPr()
+            pBdr = OxmlElement('w:pBdr')
+            bottom = OxmlElement('w:bottom')
+            bottom.set(qn('w:val'), 'single')
+            bottom.set(qn('w:sz'), '6')
+            bottom.set(qn('w:space'), '1')
+            bottom.set(qn('w:color'), '000000')  # Black border
+            pBdr.append(bottom)
+            pPr.append(pBdr)
+
+        # Contact header — name line
+        if contact_lines:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_after = Pt(2)
+            run = p.add_run(contact_lines[0])
+            run.bold = True
+            run.font.name = 'Arial'
+            run.font.size = Pt(11)  # Name size 11pt as requested
+            run.font.color.rgb = RGBColor(0, 0, 0)
+
+            if len(contact_lines) > 1:
+                p2 = doc.add_paragraph(" | ".join(contact_lines[1:]))
+                p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p2.paragraph_format.space_after = Pt(4)
+                for run in p2.runs:
+                    run.font.name = 'Arial'
+                    run.font.size = Pt(9)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+
+        for item in body_sections:
+            t, text = item["type"], item["text"]
+
+            if t == "section_header":
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(6)
+                p.paragraph_format.space_after = Pt(2)
+                add_border_bottom(p)
+                run = p.add_run(text)
+                run.bold = True
+                run.font.name = 'Times New Roman'
+                run.font.size = Pt(10)
+                run.font.color.rgb = RGBColor(0, 0, 0)
+
+            elif t == "job_header":
+                parts = [x.strip() for x in text.split('|')]
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(4)
+                p.paragraph_format.space_after = Pt(1)
+                r1 = p.add_run(parts[0])
+                r1.bold = True
+                r1.font.name = 'Arial'
+                r1.font.size = Pt(9)
+                r1.font.color.rgb = RGBColor(0, 0, 0)
+                if len(parts) > 1:
+                    r2 = p.add_run(" | " + " | ".join(parts[1:]))
+                    r2.font.name = 'Arial'
+                    r2.font.size = Pt(9)
+                    r2.font.color.rgb = RGBColor(0, 0, 0)
+
+            elif t == "bullet":
+                # Ensure bullet text ends with full stop
+                bullet_text = text.rstrip()
+                if bullet_text and not bullet_text.endswith('.'):
+                    bullet_text += '.'
+                p = doc.add_paragraph(style='List Bullet')
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                p.paragraph_format.space_after = Pt(1)
+                p.paragraph_format.left_indent = Inches(0.2)
+                run = p.add_run(bullet_text)
+                run.font.name = 'Arial'
+                run.font.size = Pt(9)
+                run.font.color.rgb = RGBColor(0, 0, 0)
+
+            elif t == "paragraph":
+                p = doc.add_paragraph(text)
+                p.paragraph_format.space_after = Pt(2)
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                for run in p.runs:
+                    run.font.name = 'Arial'
+                    run.font.size = Pt(9)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+
+        doc.save(output_path)
+        return True
+    except Exception as e:
+        print(f"   ❌ python-docx fallback failed: {e}")
+        return False
+
+# ============================================================================
+# PYTHON-DOCX FALLBACK — COVER LETTER
+# ============================================================================
+
+SALUTATION_BLOCK = "Yours sincerely,\n\nShivansh Rao Mavidanam\nAPA UCD, MSc Finance, TCD"
+
+def create_cover_letter_docx_fallback(cover_letter_text, output_path):
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        doc = DocxDocument()
+        for section in doc.sections:
+            section.top_margin    = Inches(0.7)
+            section.bottom_margin = Inches(0.7)
+            section.left_margin   = Inches(0.7)
+            section.right_margin  = Inches(0.7)
+
+        # Strip any trailing salutation Claude may have accidentally included
+        # (we normalise everything through SALUTATION_BLOCK below)
+        body = strip_salutation(cover_letter_text)
+
+        for para in body.split('\n\n'):
+            para = para.strip()
+            if not para:
+                continue
+            # Handle single-newline blocks (address block, subject line etc.)
+            if '\n' in para:
+                for line in para.split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    p = doc.add_paragraph(line)
+                    p.paragraph_format.space_after = Pt(2)
+                    for run in p.runs:
+                        run.font.name = 'Arial'
+                        run.font.size = Pt(10)
+                        run.font.color.rgb = RGBColor(0, 0, 0)
+            else:
+                p = doc.add_paragraph(para)
+                p.paragraph_format.space_after = Pt(8)
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                for run in p.runs:
+                    run.font.name = 'Arial'
+                    run.font.size = Pt(10)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+
+        # Add fixed salutation
+        doc.add_paragraph()  # blank spacer
+        for line in SALUTATION_BLOCK.split('\n'):
+            p = doc.add_paragraph(line)
+            p.paragraph_format.space_after = Pt(2)
+            for run in p.runs:
+                run.font.name = 'Arial'
+                run.font.size = Pt(10)
+                run.font.color.rgb = RGBColor(0, 0, 0)
+
+        doc.save(output_path)
+        return True
+    except Exception as e:
+        print(f"   ❌ python-docx CL fallback failed: {e}")
+        return False
+
+
+def strip_salutation(text):
+    """Remove any sign-off block Claude may have appended."""
+    patterns = [
+        r'\n+Yours sincerely[\s\S]*$',
+        r'\n+Kind regards[\s\S]*$',
+        r'\n+Best regards[\s\S]*$',
+        r'\n+Sincerely[\s\S]*$',
+    ]
+    for pat in patterns:
+        text = re.sub(pat, '', text, flags=re.IGNORECASE)
+    return text.rstrip()
+
+# ============================================================================
+# DOCX CREATION VIA NODE.JS
+# ============================================================================
+
+def parse_cv_for_docx(cv_text):
+    sections = []
+    for line in cv_text.split('\n'):
+        raw = line.rstrip()
+        stripped = raw.strip()
+
+        if not stripped:
+            continue
+
+        if (stripped.isupper() and '|' not in stripped and len(stripped) < 70
+                and not stripped.startswith('•')):
+            sections.append({"type": "section_header", "text": stripped})
+
+        elif '|' in stripped and re.search(r'\d{4}', stripped):
+            sections.append({"type": "job_header", "text": stripped})
+
+        elif stripped.startswith('•'):
+            bullet_text = stripped[1:].strip()
+            # Ensure full stop
+            if bullet_text and not bullet_text.endswith('.'):
+                bullet_text += '.'
+            sections.append({"type": "bullet", "text": bullet_text})
+
+        else:
+            sections.append({"type": "paragraph", "text": stripped})
+
+    return sections
+
+def build_docx_js_script(cv_sections, contact_lines, output_path):
+    def js_str(s):
+        s = s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+        return f'"{s}"'
+
+    children_lines = []
+
+    if contact_lines:
+        name_line = contact_lines[0] if contact_lines else ""
+        contact_rest = " | ".join(contact_lines[1:]) if len(contact_lines) > 1 else ""
+
+        if name_line:
+            children_lines.append(f"""new Paragraph({{
+  alignment: AlignmentType.CENTER,
+  spacing: {{ after: 40 }},
+  children: [new TextRun({{ text: {js_str(name_line)}, bold: true, size: 22, font: "Arial", color: "000000" }})]
+}})""")  # size 22 = 11pt (half-points)
+        if contact_rest:
+            children_lines.append(f"""new Paragraph({{
+  alignment: AlignmentType.CENTER,
+  spacing: {{ after: 80 }},
+  children: [new TextRun({{ text: {js_str(contact_rest)}, size: 18, font: "Arial", color: "000000" }})]
+}})""")
+
+    for item in cv_sections:
+        t = item["type"]
+        text = item["text"]
+
+        if t == "section_header":
+            # Times New Roman 10pt, bold, black, bottom border
+            children_lines.append(f"""new Paragraph({{
+  spacing: {{ before: 120, after: 40 }},
+  border: {{ bottom: {{ style: BorderStyle.SINGLE, size: 6, color: "000000", space: 1 }} }},
+  children: [new TextRun({{ text: {js_str(text)}, bold: true, size: 20, font: "Times New Roman", color: "000000" }})]
+}})""")
+
+        elif t == "job_header":
+            parts = [p.strip() for p in text.split('|')]
+            if len(parts) >= 2:
+                job_title = parts[0]
+                rest = " | ".join(parts[1:])
+                children_lines.append(f"""new Paragraph({{
+  spacing: {{ before: 80, after: 20 }},
+  children: [
+    new TextRun({{ text: {js_str(job_title)}, bold: true, size: 18, font: "Arial", color: "000000" }}),
+    new TextRun({{ text: {js_str(" | " + rest)}, size: 18, font: "Arial", color: "000000" }})
+  ]
+}})""")
+            else:
+                children_lines.append(f"""new Paragraph({{
+  spacing: {{ before: 80, after: 20 }},
+  children: [new TextRun({{ text: {js_str(text)}, bold: true, size: 18, font: "Arial", color: "000000" }})]
+}})""")
+
+        elif t == "bullet":
+            children_lines.append(f"""new Paragraph({{
+  numbering: {{ reference: "cvbullets", level: 0 }},
+  alignment: AlignmentType.JUSTIFIED,
+  spacing: {{ after: 20 }},
+  children: [new TextRun({{ text: {js_str(text)}, size: 18, font: "Arial", color: "000000" }})]
+}})""")
+
+        elif t == "paragraph":
+            children_lines.append(f"""new Paragraph({{
+  spacing: {{ after: 40 }},
+  alignment: AlignmentType.JUSTIFIED,
+  children: [new TextRun({{ text: {js_str(text)}, size: 18, font: "Arial", color: "000000" }})]
+}})""")
+
+    children_str = ",\n    ".join(children_lines)
+
+    script = f"""const {{ Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, LevelFormat }} = require('docx');
+const fs = require('fs');
+
+const doc = new Document({{
+  numbering: {{
+    config: [
+      {{
+        reference: "cvbullets",
+        levels: [{{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: "\\u2022",
+          alignment: AlignmentType.LEFT,
+          style: {{
+            paragraph: {{
+              indent: {{ left: 360, hanging: 180 }}
+            }},
+            run: {{ font: "Arial", size: 18, color: "000000" }}
+          }}
+        }}]
+      }}
+    ]
+  }},
+  sections: [{{
+    properties: {{
+      page: {{
+        size: {{ width: 12240, height: 15840 }},
+        margin: {{ top: 576, right: 720, bottom: 576, left: 720 }}
+      }}
+    }},
+    children: [
+    {children_str}
+    ]
+  }}]
+}});
+
+Packer.toBuffer(doc).then(buffer => {{
+  fs.writeFileSync({js_str(str(output_path))}, buffer);
+  console.log("OK");
+}}).catch(e => {{ console.error(e); process.exit(1); }});
+"""
+    return script
+
+def parse_contact_and_body(cv_text):
+    lines = cv_text.split('\n')
+    contact_lines = []
+    body_start = 0
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.isupper() and '|' not in stripped and len(stripped) < 70:
+            body_start = i
+            break
+        contact_lines.append(stripped)
+
+    body_text = '\n'.join(lines[body_start:])
+    body_sections = parse_cv_for_docx(body_text)
+    return contact_lines, body_sections
+
+def create_cv_docx(cv_text, output_path):
+    contact_lines, body_sections = parse_contact_and_body(cv_text)
+    script = build_docx_js_script(body_sections, contact_lines, output_path)
+
+    with tempfile.NamedTemporaryFile(suffix='.js', mode='w', delete=False) as f:
+        f.write(script)
+        script_path = f.name
+
+    try:
+        node_bin = find_node()
+        if not node_bin:
+            print("   ⚠️  node not found — falling back to python-docx")
+            os.unlink(script_path)
+            return create_cv_docx_fallback(cv_text, output_path)
+        result = subprocess.run([node_bin, script_path], capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            print(f"   ⚠️  docx error: {result.stderr[:300]}")
+            os.unlink(script_path)
+            return create_cv_docx_fallback(cv_text, output_path)
+        return True
+    finally:
+        try:
+            os.unlink(script_path)
+        except:
+            pass
+
+
+def create_cover_letter_docx(cover_letter_text, output_path, company, role):
+    def js_str(s):
+        s = s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+        return f'"{s}"'
+
+    # Strip any accidental salutation from Claude output before building docx
+    body = strip_salutation(cover_letter_text)
+
+    paragraphs = []
+    for block in body.split('\n\n'):
+        block = block.strip()
+        if not block:
+            continue
+        # Multi-line blocks (address, subject line) — split into individual lines
+        if '\n' in block:
+            for line in block.split('\n'):
+                line = line.strip()
+                if line:
+                    paragraphs.append({"text": line, "justify": False})
+        else:
+            paragraphs.append({"text": block, "justify": True})
+
+    para_nodes = []
+    for item in paragraphs:
+        align = "AlignmentType.JUSTIFIED" if item["justify"] else "AlignmentType.LEFT"
+        para_nodes.append(f"""new Paragraph({{
+  spacing: {{ after: 160 }},
+  alignment: {align},
+  children: [new TextRun({{ text: {js_str(item['text'])}, size: 20, font: "Arial", color: "000000" }})]
+}})""")
+
+    # Fixed salutation block
+    salutation_lines = SALUTATION_BLOCK.split('\n')
+    salutation_nodes = []
+    for line in salutation_lines:
+        salutation_nodes.append(f"""new Paragraph({{
+  spacing: {{ after: 40 }},
+  children: [new TextRun({{ text: {js_str(line)}, size: 20, font: "Arial", color: "000000" }})]
+}})""")
+
+    all_nodes = para_nodes + [
+        # Spacer before salutation
+        """new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: "" })] })"""
+    ] + salutation_nodes
+
+    children_str = ",\n    ".join(all_nodes)
+
+    script = f"""const {{ Document, Packer, Paragraph, TextRun, AlignmentType }} = require('docx');
+const fs = require('fs');
+
+const doc = new Document({{
+  sections: [{{
+    properties: {{
+      page: {{
+        size: {{ width: 12240, height: 15840 }},
+        margin: {{ top: 1008, right: 1008, bottom: 1008, left: 1008 }}
+      }}
+    }},
+    children: [{children_str}]
+  }}]
+}});
+
+Packer.toBuffer(doc).then(buffer => {{
+  fs.writeFileSync({js_str(str(output_path))}, buffer);
+  console.log("OK");
+}}).catch(e => {{ console.error(e); process.exit(1); }});
+"""
+
+    with tempfile.NamedTemporaryFile(suffix='.js', mode='w', delete=False) as f:
+        f.write(script)
+        script_path = f.name
+
+    try:
+        node_bin = find_node()
+        if not node_bin:
+            print("   ⚠️  node not found — falling back to python-docx")
+            os.unlink(script_path)
+            return create_cover_letter_docx_fallback(cover_letter_text, output_path)
+        result = subprocess.run([node_bin, script_path], capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            print(f"   ⚠️  cover letter docx error: {result.stderr[:300]}")
+            os.unlink(script_path)
+            return create_cover_letter_docx_fallback(cover_letter_text, output_path)
+        return True
+    finally:
+        try:
+            os.unlink(script_path)
+        except:
+            pass
+
+# ============================================================================
+# OUTPUT FOLDER — unique even if same role+company applied twice same day
+# ============================================================================
+
+def create_output_folder(job_role, company):
+    today = datetime.now().strftime("%d%m%Y")
+    timestamp = datetime.now().strftime("%H%M")  # hour+minute to avoid collisions
+    role_clean = re.sub(r'[^\w\s]', '', job_role).strip()
+    company_clean = re.sub(r'[^\w\s]', '', company).strip()
+    role_words = role_clean.split()[:2]
+    company_words = company_clean.split()[:2]
+    # Base folder name without timestamp first; add timestamp only if collision
+    base_name = f"Shivansh Rao MSc Finance TCD {' '.join(role_words)} {' '.join(company_words)} {today}"
+    folder_path = OUTPUT_BASE_DIR / base_name
+    if folder_path.exists():
+        # Folder already exists — add HHMM to differentiate
+        folder_name = f"{base_name} {timestamp}"
+        folder_path = OUTPUT_BASE_DIR / folder_name
+    else:
+        folder_name = base_name
+    folder_path.mkdir(parents=True, exist_ok=True)
+    return folder_path, folder_name
+
+# ============================================================================
+# SAVE ALL FILES
+# ============================================================================
+
+def save_all_files(cv_text, cover_letter, job_keywords, matched, unmatched, ats_score,
+                   job_description, job_role, company, iteration_count):
+    folder_path, folder_name = create_output_folder(job_role, company)
+    print(f"\n💾 Saving to: {folder_path}\n")
+
+    # 1. CV docx
+    cv_path = folder_path / f"{folder_name}.docx"
+    ok = create_cv_docx(cv_text, cv_path)
+    print(f"{'✅' if ok else '❌'} CV (Word): {cv_path.name}")
+
+    # 2. Cover letter docx
+    cl_path = folder_path / f"{folder_name} Cover Letter.docx"
+    ok2 = create_cover_letter_docx(cover_letter, cl_path, company, job_role)
+    print(f"{'✅' if ok2 else '❌'} Cover Letter: {cl_path.name}")
+
+    # 3. Keywords comparison txt
+    kw_path = folder_path / f"{folder_name} Keywords Comparison.txt"
+    kw_content = f"""KEYWORDS COMPARISON REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+ATS Score: {ats_score}%
+Iterations: {iteration_count}
+
+TOTAL JOB KEYWORDS : {len(job_keywords)}
+MATCHED            : {len(matched)}
+MISSING            : {len(unmatched)}
+
+=== MATCHED KEYWORDS ({len(matched)}) ===
+{chr(10).join(f'  ✓ {k}' for k in sorted(matched))}
+
+=== MISSING KEYWORDS ({len(unmatched)}) ===
+{chr(10).join(f'  ✗ {k}' for k in sorted(unmatched))}
+"""
+    kw_path.write_text(kw_content, encoding='utf-8')
+    print(f"✅ Keywords Comparison: {kw_path.name}")
+
+    # 4. Metadata
+    meta_path = folder_path / "metadata.txt"
+    meta_path.write_text(f"""METADATA
+Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Role      : {job_role}
+Company   : {company}
+ATS Score : {ats_score}%
+Iterations: {iteration_count}
+
+JOB DESCRIPTION:
+{job_description}
+""", encoding='utf-8')
+    print(f"✅ Metadata: {meta_path.name}")
+
+    print(f"\n{'='*70}")
+    print(f"🎉 SUCCESS! Saved to: {folder_path}")
+    print(f"{'='*70}")
+
+# ============================================================================
+# DISPLAY HELPERS
+# ============================================================================
+
+def display_cv(cv_text):
+    print(f"\n{'='*70}")
+    print("📄 TAILORED CV")
+    print(f"{'='*70}")
+    print(cv_text)
+    print(f"{'='*70}")
+
+def display_ats(score, matched, total, unmatched):
+    bar = "█" * (score // 5) + "░" * (20 - score // 5)
+    print(f"\n{'='*60}")
+    print(f"  ATS SCORE : {score}%  [{bar}]")
+    print(f"  Matched   : {len(matched)}/{total} keywords")
+    print(f"{'='*60}")
+    if matched:
+        print(f"  ✓ Sample matched : {', '.join(list(matched)[:8])}")
+    if unmatched:
+        print(f"  ✗ Top missing    : {', '.join(list(unmatched)[:8])}")
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def main():
+    print("\n" + "🎯 " * 10)
+    print("  ADVANCED CV GENERATOR WITH ATS OPTIMIZATION")
+    print("🎯 " * 10)
+
+    client = get_client()
+
+    while True:
+        print("\n📋 PASTE JOB DESCRIPTION  (press Enter twice when done, or type 'exit')")
+        print("-" * 70)
+
+        lines = []
+        empty_count = 0
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                break
+            if line.strip().lower() == "exit":
+                print("\n👋 Goodbye!")
+                return
+            if line == "":
+                empty_count += 1
+                if empty_count >= 2:
+                    break
+                lines.append(line)
+            else:
+                empty_count = 0
+                lines.append(line)
+
+        job_description = "\n".join(lines).strip()
+        if not job_description:
+            print("❌ No job description provided.")
+            continue
+
+        job_keywords = extract_keywords(client, job_description)
+        company = extract_company(job_description)
+
+        cv_text = generate_cv(client, job_description, job_keywords)
+
+        if not cv_text:
+            print("❌ Failed to generate CV. Try again.")
+            continue
+
+        iteration = 1
+
+        while True:
+            score, matched, unmatched = calculate_ats(job_keywords, cv_text)
+
+            print(f"\n{'='*70}  ITERATION {iteration}  {'='*70}"[:74])
+            display_cv(cv_text)
+            display_ats(score, matched, len(job_keywords), unmatched)
+
+            if score >= 93:
+                print(f"\n✅ ATS Score is EXCELLENT ({score}%)")
+                prompt_msg = "📝 Enter job role (e.g. 'Transfer Agency') to SAVE, or 'n' to keep optimising:\n> "
+            else:
+                print(f"\n⚠️  ATS Score is {score}% (Target: 93%)")
+                prompt_msg = "📝 Enter job role to SAVE, or 'n' to REWORK:\n> "
+
+            user_input = input(prompt_msg).strip()
+
+            if user_input.lower() == "n":
+                iteration += 1
+                cv_text = rework_cv(client, cv_text, job_description, job_keywords, unmatched)
+
+            elif user_input.lower() == "exit":
+                print("\n👋 Goodbye!")
+                return
+
+            elif user_input:
+                job_role = user_input
+                cover_letter = generate_cover_letter(client, cv_text, job_description)
+                final_score, final_matched, final_unmatched = calculate_ats(job_keywords, cv_text)
+                save_all_files(
+                    cv_text, cover_letter, job_keywords,
+                    final_matched, final_unmatched, final_score,
+                    job_description, job_role, company, iteration
+                )
+                break
+
+            else:
+                print("❌ Please type a role name or 'n'.")
+
+
+if __name__ == "__main__":
+    main()
